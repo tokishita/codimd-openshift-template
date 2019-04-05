@@ -2,7 +2,7 @@
 
 Thank you for your great application, codiMD community and developers(https://github.com/hackmdio/codimd)
 
-### I DIDN'T MODIFY ANY CODE from codiMD repo
+### I DO NOT MODIFY ANY CODE from codiMD repo
 
 
 This template deploys:
