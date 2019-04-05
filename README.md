@@ -1,6 +1,6 @@
 # OpenShift Template for containerized codeMD
 
-Thank you for your great application, codiMD comunity and developpers(https://github.com/hackmdio/codimd)
+Thank you for your great application, codiMD community and developers(https://github.com/hackmdio/codimd)
 
 ### I DIDN'T MODIFY ANY CODE from codiMD repo
 
