@@ -1,0 +1,258 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: codimd
+metadata:
+  name: codimd
+  annotations:
+    description: "OpenShift Template for codiMD application(https://github.com/hackmdio/codimd) deployment"
+    iconClass: "pficon-edit"
+    openshift.io/display-name: "codiMD"
+    template.openshift.io/bindable: "True"
+    tags: "instant-app,codimd"
+objects:
+- kind: ImageStream
+  apiVersion: v1
+  metadata:
+    name: codimd
+  spec:
+    dockerImageRepository: "docker.io/kishitat/codimd"
+- apiVersion: v1
+  groupNames: null
+  kind: RoleBinding
+  metadata:
+    name: sa_update
+  roleRef:
+    name: edit
+  subjects:
+  - kind: ServiceAccount
+    name: default
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    name: codimd
+  spec:
+    replicas: 1
+    template:
+      metadata:
+        labels:
+          name: codimd
+      spec:
+        containers:
+        - image: " "
+          imagePullPolicy: IfNotPresent
+          name: codimd
+          env:
+          - name: CMD_DB_URL
+            value: "postgres://codimd:codimd@postgresql/codimd"
+          - name: CMD_SESSION_SECRET
+            value: ${SESSION_SECRET}
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          resources:
+            limits:
+              memory: ${APP_MEMORY_LIMIT}
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 10
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            successThreshold: 1
+            timeoutSeconds: 10
+          volumeMounts:
+          - mountPath: /codimd/public/uploads
+            name: upload-data
+        volumes:
+        - emptyDir:
+          name: upload-data
+        restartPolicy: Always
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+        - codimd
+        from:
+          kind: ImageStreamTag
+          name: codimd:latest
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: codimd
+  spec:
+    ports:
+    - name: codimd
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      name: codimd
+    type: ClusterIP
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: codimd
+  spec:
+    port:
+      targetPort: 8080
+    to:
+      kind: Service
+      name: codimd
+      weight: 100
+  wildcardPolicy: None
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    name: postgresql
+  spec:
+    replicas: 1
+    selector:
+      name: postgresql
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: postgresql
+      spec:
+        containers:
+        - env:
+          - name: POSTGRESQL_USER
+            value: codimd
+          - name: POSTGRESQL_PASSWORD
+            value: codimd
+          - name: POSTGRESQL_DATABASE
+            value: codimd
+          image: ' '
+          imagePullPolicy: IfNotPresent
+          livenddessProbe:
+            exec:
+              command:
+              - /usr/libexec/check-container
+              - --live
+            initialDelaySeconds: 120
+            timeoutSeconds: 10
+          name: postgresql
+          ports:
+          - containerPort: 5432
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /usr/libexec/check-container
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+          resources:
+            limits:
+              memory: ${DB_MEMORY_LIMIT}
+          volumeMounts:
+          - mountPath: /var/lib/pgsql/data
+            name: db-data
+        restartPolicy: Always
+        volumes:
+        - emptyDir:
+          name: db-data
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - postgresql
+        from:
+          kind: ImageStreamTag
+          name: postgresql:9.6
+          namespace: openshift
+      type: ImageChange
+    - type: ConfigChange
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: postgresql
+  spec:
+    ports:
+    - name: postgresql
+      nodePort: 0
+      port: 5432
+      protocol: TCP
+      targetPort: 5432
+    selector:
+      name: postgresql
+    type: ClusterIP
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    name: initial-setup
+  spec:
+    activeDeadlineSeconds: 400
+    completions: 1
+    parallelism: 1
+    template:
+      spec:
+        containers:
+        - name: initial-setup
+          env:
+          - name: USE_PV
+            value: ${DATA_PERSISTENT}
+          command:
+          - /bin/bash
+          - -x
+          - -c
+          - |
+            # set codimd CMD_DOMAIN
+            HOSTNAME=$(oc get route codimd -o template --template='{{.spec.host}}')
+            oc rollout pause dc codimd
+            oc set env dc/codimd CMD_DOMAIN=${HOSTNAME}
+            
+            # apply PVC to apps if DATA_PERSISTENT is set
+            if ${USE_PV} ; then
+              oc set volume dc/codimd --add --name=upload-data -t pvc --claim-size=${UPLOAD_VOLUME_SIZE} --claim-name=pvc-codimd --overwrite 
+              oc set volume dc/postgresql --add --name=db-data -t pvc --claim-size=${DB_VOLUME_SIZE} --claim-name=pvc-postgresql --overwrite
+            else
+              echo "PV flag DATA_PERSISTENT is false, keep using EmptyDir for codiMD UPLOAD DIR and DB DATA DIR"
+            fi
+            # deploy codimd
+            oc rollout resume dc codimd
+          image: openshift/origin-cli:v3.11
+        restartPolicy: Never
+parameters:
+- name: APP_MEMORY_LIMIT
+  displayName: App Memory Limit
+  description: Maximum amount of memory the codiMD container can use.
+  required: true
+  value: 512Mi
+- name: DB_MEMORY_LIMIT
+  description: Maximum amount of memory the DB container can use.
+  displayName: DB Memory Limit
+  required: true
+  value: 512Mi
+- name: SESSION_SECRET
+  displayName: Session Secret
+  description:  Secret used to sign the session cookie. If non is set, one will randomly generated
+  from: '[a-zA-Z0-9]{16}'
+  generate: expression
+- name: DATA_PERSISTENT
+  display Name: Data Persistency
+  description: Boolean parameter. if true, then persistent volume is attached to codiMD and PostgreSQL Pod
+  value: 'false'
+- name: DB_VOLUME_SIZE
+  displayName: DB Volume Size
+  description: Size of Persistent Volume attached to database data dir.
+  value: 2Gi
+- name: UPLOAD_VOLUME_SIZE
+  displayName: APP Volume Size
+  description: Size of Persistent Volume mount to codiMD Pod where uploaded binary file is stored.
+  value: 2Gi
