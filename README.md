@@ -12,11 +12,11 @@ This template deploys:
 ### To deploy codiMD
 
 ```
-oc process -f codimd-openshift-template.yml | oc apply -f -
+oc process -f https://raw.githubusercontent.com/tokishita/codimd-openshift-template/master/codimd-openshift-template.yml | oc apply -f -
 ```
 
 ### Deploy codiMD with PV ( volume for PostgreSQL Pod(data dir) and codiMD Pod( uploads file store )
 
 ```
-oc process -f codimd-openshift-template.yml  DATA_PERSISTENT=true | oc apply -f -
+oc process -f https://raw.githubusercontent.com/tokishita/codimd-openshift-template/master/codimd-openshift-template.yml  DATA_PERSISTENT=true | oc apply -f -
 ```
