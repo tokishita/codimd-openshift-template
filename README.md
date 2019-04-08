@@ -18,5 +18,5 @@ oc process -f https://raw.githubusercontent.com/tokishita/codimd-openshift-templ
 ### Deploy codiMD with PV ( volume for PostgreSQL Pod(data dir) and codiMD Pod( uploads file store )
 
 ```
-oc process -f https://raw.githubusercontent.com/tokishita/codimd-openshift-template/master/codimd-openshift-template.yml  DATA_PERSISTENT=true | oc apply -f -
+oc process -f https://raw.githubusercontent.com/tokishita/codimd-openshift-template/master/codimd-openshift-template.yml  DATA_PERSISTENT=true UPLOAD_VOLUME_SIZE=2Gi DB_VOLUME_SIZE=2Gi | oc apply -f -
 ```
